@@ -23,22 +23,28 @@ lto = true
 [dependencies]
 # The `wasm-bindgen` crate provides the bare minimum functionality needed
 # to interact with JavaScript.
-wasm-bindgen = { version = "0.2.45" }
+wasm-bindgen = { version = "0.2.81", features = ["serde-serialize"] }
 console_error_panic_hook = "0.1.7"
-rand = "0.8.4"
-getrandom = { version = "0.2.3", features = ["js"] }
-futures = "0.1.27"
+rand = "0.8.5"
+getrandom = { version = "0.2.7", features = ["js"] }
+futures = "0.3.21"
+wasm-bindgen-futures = "0.4.31"
+serde = {version = "1.0.139", features = ["derive"] }
+
+
 
 # The `web-sys` crate allows you to interact with the various browser APIs,
 # like the DOM.
 [dependencies.web-sys]
-version = "0.3.22"
+version = "0.3.58"
 features = [
     "CanvasRenderingContext2d",
     "console",
     "Document",
     "Element",
     "HtmlCanvasElement",
+    "HtmlImageElement",
+    "Response",
     "Window"
 ]
 
@@ -50,7 +56,7 @@ features = [
 
 # These crates are used for running unit tests.
 [dev-dependencies]
-wasm-bindgen-test = "0.2.45"
-futures = "0.1.27"
-js-sys = "0.3.22"
-wasm-bindgen-futures = "0.3.22"
+wasm-bindgen-test = "0.3.31"
+futures = "0.3.21"
+js-sys = "0.3.58"
+wasm-bindgen-futures = "0.4.31"
