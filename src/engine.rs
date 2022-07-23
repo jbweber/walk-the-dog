@@ -4,6 +4,7 @@ use futures::channel::{
     mpsc::{unbounded, UnboundedReceiver},
     oneshot::channel,
 };
+use serde::Deserialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
 use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
@@ -72,6 +73,13 @@ fn process_input(state: &mut KeyState, keyevent_reciever: &mut UnboundedReceiver
 }
 
 type SharedLoopClosure = Rc<RefCell<Option<LoopClosure>>>;
+
+#[derive(Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Cell {
+    pub frame: SheetRect,
+    pub sprite_source_size: SheetRect,
+}
 
 #[async_trait(?Send)]
 pub trait Game {
@@ -297,5 +305,37 @@ impl Renderer {
             rect.height.into(),
         );
         self.context.stroke();
+    }
+}
+
+#[derive(Deserialize, Clone)]
+pub struct Sheet {
+    pub frames: HashMap<String, Cell>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
+}
+
+pub struct SpriteSheet {
+    sheet: Sheet,
+    image: HtmlImageElement,
+}
+
+impl SpriteSheet {
+    pub fn cell(&self, name: &str) -> Option<&Cell> {
+        self.sheet.frames.get(name)
+    }
+
+    pub fn draw(&self, renderer: &Renderer, source: &Rect, destination: &Rect) {
+        renderer.draw_image(&self.image, source, destination);
+    }
+
+    pub fn new(sheet: Sheet, image: HtmlImageElement) -> Self {
+        SpriteSheet { sheet, image }
     }
 }
