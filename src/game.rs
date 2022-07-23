@@ -5,7 +5,7 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde::{Deserialize, __private::de};
+use serde::Deserialize;
 use std::collections::HashMap;
 use web_sys::HtmlImageElement;
 
@@ -23,7 +23,7 @@ pub struct Cell {
 pub enum Event {
     Jump,
     KnockOut,
-    Land(f32),
+    Land(i16),
     Run,
     Slide,
     Update,
@@ -37,16 +37,16 @@ pub struct RedHatBoy {
 
 impl RedHatBoy {
     fn bounding_box(&self) -> Rect {
-        const X_OFFSET: f32 = 18.0;
-        const Y_OFFSET: f32 = 14.0;
-        const WIDTH_OFFSET: f32 = 28.0;
+        const X_OFFSET: i16 = 18;
+        const Y_OFFSET: i16 = 14;
+        const WIDTH_OFFSET: i16 = 28;
 
-        let mut bounding_box = self.destination_box();
-        bounding_box.x += X_OFFSET;
-        bounding_box.width -= WIDTH_OFFSET;
-        bounding_box.y += Y_OFFSET;
-        bounding_box.height -= Y_OFFSET;
-        bounding_box
+        Rect::new_from_x_y(
+            self.destination_box().x() + X_OFFSET,
+            self.destination_box().y() + Y_OFFSET,
+            self.destination_box().width - WIDTH_OFFSET,
+            self.destination_box().height - Y_OFFSET,
+        )
     }
 
     fn current_sprite(&self) -> Option<&Cell> {
@@ -56,14 +56,12 @@ impl RedHatBoy {
     fn destination_box(&self) -> Rect {
         let sprite = self.current_sprite().expect("Cell not found");
 
-        Rect {
-            x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
-                .into(),
-            y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
-                .into(),
-            width: sprite.sprite_source_size.w.into(),
-            height: sprite.sprite_source_size.h.into(),
-        }
+        Rect::new_from_x_y(
+            (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16).into(),
+            (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16).into(),
+            sprite.sprite_source_size.w.into(),
+            sprite.sprite_source_size.h.into(),
+        )
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -71,12 +69,12 @@ impl RedHatBoy {
 
         renderer.draw_image(
             &self.image,
-            &Rect {
-                x: sprite.frame.x.into(),
-                y: sprite.frame.y.into(),
-                width: sprite.frame.w.into(),
-                height: sprite.frame.h.into(),
-            },
+            &Rect::new_from_x_y(
+                sprite.frame.x.into(),
+                sprite.frame.y.into(),
+                sprite.frame.w.into(),
+                sprite.frame.h.into(),
+            ),
             &self.destination_box(),
         );
 
@@ -99,7 +97,7 @@ impl RedHatBoy {
         self.state_machine = self.state_machine.transition(Event::KnockOut);
     }
 
-    fn land_on(&mut self, position: f32) {
+    fn land_on(&mut self, position: i16) {
         self.state_machine = self.state_machine.transition(Event::Land(position));
     }
 
@@ -275,31 +273,31 @@ struct Platform {
 
 impl Platform {
     fn bounding_boxes(&self) -> Vec<Rect> {
-        const X_OFFSET: f32 = 60.0;
-        const END_HEIGHT: f32 = 45.0;
+        const X_OFFSET: i16 = 60;
+        const END_HEIGHT: i16 = 45;
 
         let destination_box = self.destination_box();
 
-        let bounding_box_one = Rect {
-            x: destination_box.x,
-            y: destination_box.y,
-            width: X_OFFSET,
-            height: END_HEIGHT,
-        };
+        let bounding_box_one = Rect::new_from_x_y(
+            destination_box.x(),
+            destination_box.y(),
+            X_OFFSET,
+            END_HEIGHT,
+        );
 
-        let bounding_box_two = Rect {
-            x: destination_box.x + X_OFFSET,
-            y: destination_box.y,
-            width: destination_box.width - (X_OFFSET * 2.0),
-            height: destination_box.height,
-        };
+        let bounding_box_two = Rect::new_from_x_y(
+            destination_box.x() + X_OFFSET,
+            destination_box.y(),
+            destination_box.width - (X_OFFSET * 2),
+            destination_box.height,
+        );
 
-        let bounding_box_three = Rect {
-            x: destination_box.x + destination_box.width - X_OFFSET,
-            y: destination_box.y,
-            width: X_OFFSET,
-            height: END_HEIGHT,
-        };
+        let bounding_box_three = Rect::new_from_x_y(
+            destination_box.x() + destination_box.width - X_OFFSET,
+            destination_box.y(),
+            X_OFFSET,
+            END_HEIGHT,
+        );
 
         vec![bounding_box_one, bounding_box_two, bounding_box_three]
     }
@@ -311,12 +309,12 @@ impl Platform {
             .get("13.png")
             .expect("13.png does not exist");
 
-        Rect {
-            x: self.position.x.into(),
-            y: self.position.y.into(),
-            width: (platform.frame.w * 3).into(),
-            height: platform.frame.h.into(),
-        }
+        Rect::new_from_x_y(
+            self.position.x.into(),
+            self.position.y.into(),
+            (platform.frame.w * 3).into(),
+            platform.frame.h.into(),
+        )
     }
 
     fn draw(&self, renderer: &Renderer) {
@@ -328,12 +326,12 @@ impl Platform {
 
         renderer.draw_image(
             &self.image,
-            &Rect {
-                x: platform.frame.x.into(),
-                y: platform.frame.y.into(),
-                width: (platform.frame.w * 3).into(),
-                height: platform.frame.h.into(),
-            },
+            &Rect::new_from_x_y(
+                platform.frame.x.into(),
+                platform.frame.y.into(),
+                (platform.frame.w * 3).into(),
+                platform.frame.h.into(),
+            ),
             &self.destination_box(),
         )
     }
@@ -387,12 +385,7 @@ impl WalkTheDog {
 #[async_trait(?Send)]
 impl Game for WalkTheDog {
     fn draw(&self, renderer: &Renderer) {
-        renderer.clear(&Rect {
-            x: 0.0,
-            y: 0.0,
-            width: 600.0,
-            height: 600.0,
-        });
+        renderer.clear(&Rect::new_from_x_y(0, 0, 600, 600));
 
         if let WalkTheDog::Loaded(walk) = self {
             walk.backgrounds.iter().for_each(|background| {
@@ -486,7 +479,7 @@ impl Game for WalkTheDog {
             for bounding_box in &walk.platform.bounding_boxes() {
                 if walk.boy.bounding_box().intersects(bounding_box) {
                     if walk.boy.velocity_y() > 0 && walk.boy.pos_y() < walk.platform.position.y {
-                        walk.boy.land_on(bounding_box.y);
+                        walk.boy.land_on(bounding_box.y());
                     } else {
                         walk.boy.knock_out();
                     }
@@ -674,7 +667,7 @@ mod red_hat_boy_states {
             }
         }
 
-        pub fn land_on(self, position: f32) -> RedHatBoyState<Running> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Running> {
             RedHatBoyState {
                 context: self.context.reset_frame().set_on(position as i16),
                 _state: Running {},
@@ -720,7 +713,7 @@ mod red_hat_boy_states {
             }
         }
 
-        pub fn land_on(self, position: f32) -> RedHatBoyState<Running> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Running> {
             RedHatBoyState {
                 context: self.context.set_on(position as i16),
                 _state: Running {},
@@ -752,7 +745,7 @@ mod red_hat_boy_states {
             }
         }
 
-        pub fn land_on(self, position: f32) -> RedHatBoyState<Sliding> {
+        pub fn land_on(self, position: i16) -> RedHatBoyState<Sliding> {
             RedHatBoyState {
                 context: self.context.set_on(position as i16),
                 _state: Sliding {},
