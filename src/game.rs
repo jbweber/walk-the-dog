@@ -130,6 +130,10 @@ impl RedHatBoy {
     fn velocity_y(&self) -> i16 {
         self.state_machine.context().velocity.y
     }
+
+    fn walking_speed(&self) -> i16 {
+        self.state_machine.context().velocity.x
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -358,9 +362,15 @@ pub struct SheetRect {
 
 pub struct Walk {
     boy: RedHatBoy,
-    background: Image,
+    backgrounds: [Image; 2],
     stone: Image,
     platform: Platform,
+}
+
+impl Walk {
+    fn velocity(&self) -> i16 {
+        -self.boy.walking_speed()
+    }
 }
 
 pub enum WalkTheDog {
@@ -385,7 +395,9 @@ impl Game for WalkTheDog {
         });
 
         if let WalkTheDog::Loaded(walk) = self {
-            walk.background.draw(renderer);
+            walk.backgrounds.iter().for_each(|background| {
+                background.draw(renderer);
+            });
             walk.boy.draw(renderer);
             walk.stone.draw(renderer);
             walk.platform.draw(renderer);
@@ -408,7 +420,7 @@ impl Game for WalkTheDog {
                     platform_sheet.into_serde::<Sheet>()?,
                     engine::load_image("tiles.png").await?,
                     Point {
-                        x: 370,
+                        x: 400,
                         y: LOW_PLATFORM,
                     },
                 );
@@ -416,9 +428,20 @@ impl Game for WalkTheDog {
                     json.into_serde::<Sheet>()?,
                     engine::load_image("rhb.png").await?,
                 );
+                let background_width = background.width() as i16;
+
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
-                    background: Image::new(background, Point { x: 0, y: 0 }),
+                    backgrounds: [
+                        Image::new(background.clone(), Point { x: 0, y: 0 }),
+                        Image::new(
+                            background,
+                            Point {
+                                x: background_width,
+                                y: 0,
+                            },
+                        ),
+                    ],
                     stone: Image::new(stone, Point { x: 150, y: 546 }),
                     platform: platform,
                 })))
@@ -443,6 +466,22 @@ impl Game for WalkTheDog {
             }
 
             walk.boy.update();
+
+            walk.platform.position.x += walk.velocity();
+            walk.stone.move_horizontally(walk.velocity());
+
+            let velocity = walk.velocity();
+            let [first_background, second_background] = &mut walk.backgrounds;
+            first_background.move_horizontally(velocity);
+            second_background.move_horizontally(velocity);
+
+            if first_background.right() < 0 {
+                first_background.set_x(second_background.right());
+            }
+
+            if second_background.right() < 0 {
+                second_background.set_x(first_background.right());
+            }
 
             for bounding_box in &walk.platform.bounding_boxes() {
                 if walk.boy.bounding_box().intersects(bounding_box) {
@@ -546,7 +585,6 @@ mod red_hat_boy_states {
                 self.frame = 0;
             }
 
-            self.position.x += self.velocity.x;
             self.position.y += self.velocity.y;
 
             if self.position.y > FLOOR {

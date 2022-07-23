@@ -143,6 +143,10 @@ impl Image {
         renderer.draw_entire_image(&self.element, &self.position);
     }
 
+    pub fn move_horizontally(&mut self, distance: i16) {
+        self.set_x(self.position.x + distance)
+    }
+
     pub fn new(element: HtmlImageElement, position: Point) -> Self {
         let bounding_box = Rect {
             x: position.x.into(),
@@ -156,6 +160,15 @@ impl Image {
             position: position,
             bounding_box: bounding_box,
         }
+    }
+
+    pub fn right(&self) -> i16 {
+        (self.bounding_box.x + self.bounding_box.width) as i16
+    }
+
+    pub fn set_x(&mut self, x: i16) {
+        self.bounding_box.x = x as f32;
+        self.position.x = x;
     }
 }
 
