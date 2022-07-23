@@ -1,7 +1,7 @@
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
-    engine::{self, Game, KeyState, Point, Rect, Renderer},
+    engine::{self, Game, Image, KeyState, Point, Rect, Renderer},
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -10,8 +10,10 @@ use std::collections::HashMap;
 use web_sys::HtmlImageElement;
 
 #[derive(Deserialize, Clone)]
-struct Cell {
-    frame: SheetRect,
+#[serde(rename_all = "camelCase")]
+pub struct Cell {
+    pub frame: SheetRect,
+    pub sprite_source_size: SheetRect,
 }
 
 pub enum Event {
@@ -21,7 +23,7 @@ pub enum Event {
     Update,
 }
 
-struct RedHatBoy {
+pub struct RedHatBoy {
     state_machine: RedHatBoyStateMachine,
     sprite_sheet: Sheet,
     image: HtmlImageElement,
@@ -50,12 +52,23 @@ impl RedHatBoy {
                 height: sprite.frame.h.into(),
             },
             &Rect {
-                x: self.state_machine.context().position.x.into(),
-                y: self.state_machine.context().position.y.into(),
+                x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
+                    .into(),
+                y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
+                    .into(),
                 width: sprite.frame.w.into(),
                 height: sprite.frame.h.into(),
             },
         );
+
+        renderer.draw_rect(&Rect {
+            x: (self.state_machine.context().position.x + sprite.sprite_source_size.x as i16)
+                .into(),
+            y: (self.state_machine.context().position.y + sprite.sprite_source_size.y as i16)
+                .into(),
+            width: sprite.sprite_source_size.w.into(),
+            height: sprite.sprite_source_size.h.into(),
+        });
     }
 
     fn jump(&mut self) {
@@ -174,21 +187,27 @@ impl From<SlidingEndState> for RedHatBoyStateMachine {
 }
 
 #[derive(Deserialize, Clone)]
-struct Sheet {
-    frames: HashMap<String, Cell>,
+pub struct Sheet {
+    pub frames: HashMap<String, Cell>,
 }
 
 #[derive(Deserialize, Clone)]
-struct SheetRect {
-    x: i16,
-    y: i16,
-    w: i16,
-    h: i16,
+pub struct SheetRect {
+    pub x: i16,
+    pub y: i16,
+    pub w: i16,
+    pub h: i16,
+}
+
+pub struct Walk {
+    boy: RedHatBoy,
+    background: Image,
+    stone: Image,
 }
 
 pub enum WalkTheDog {
     Loading,
-    Loaded(RedHatBoy),
+    Loaded(Walk),
 }
 
 impl WalkTheDog {
@@ -207,8 +226,11 @@ impl Game for WalkTheDog {
             height: 600.0,
         });
 
-        if let WalkTheDog::Loaded(rhb) = self {
-            rhb.draw(renderer);
+        if let WalkTheDog::Loaded(walk) = self {
+            walk.background.draw(renderer);
+            walk.boy.draw(renderer);
+            walk.stone.draw(renderer);
+            walk.stone.draw_rect(renderer);
         }
     }
 
@@ -216,11 +238,17 @@ impl Game for WalkTheDog {
         match self {
             WalkTheDog::Loading => {
                 let json = browser::fetch_json("rhb.json").await?;
+                let background = engine::load_image("BG.png").await?;
+                let stone = engine::load_image("Stone.png").await?;
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
                     engine::load_image("rhb.png").await?,
                 );
-                Ok(Box::new(WalkTheDog::Loaded(rhb)))
+                Ok(Box::new(WalkTheDog::Loaded(Walk {
+                    boy: rhb,
+                    background: Image::new(background, Point { x: 0, y: 0 }),
+                    stone: Image::new(stone, Point { x: 150, y: 546 }),
+                })))
             }
 
             WalkTheDog::Loaded(_) => Err(anyhow!("Error: Game is already initialized!")),
@@ -228,20 +256,20 @@ impl Game for WalkTheDog {
     }
 
     fn update(&mut self, keystate: &KeyState) {
-        if let WalkTheDog::Loaded(rhb) = self {
+        if let WalkTheDog::Loaded(walk) = self {
             if keystate.is_pressed("ArrowDown") {
-                rhb.slide();
+                walk.boy.slide();
             }
 
             if keystate.is_pressed("ArrowRight") {
-                rhb.run_right();
+                walk.boy.run_right();
             }
 
             if keystate.is_pressed("Space") {
-                rhb.jump();
+                walk.boy.jump();
             }
 
-            rhb.update();
+            walk.boy.update();
         }
     }
 }
@@ -251,7 +279,7 @@ mod red_hat_boy_states {
 
     use super::RedHatBoyStateMachine;
 
-    const FLOOR: i16 = 475;
+    const FLOOR: i16 = 479;
     const GRAVITY: i16 = 1;
     const JUMPING_FRAME_NAME: &str = "Jump";
     const JUMPING_FRAMES: u8 = 35;
@@ -263,6 +291,7 @@ mod red_hat_boy_states {
     const RUNNING_SPEED: i16 = 3;
     const SLIDING_FRAMES: u8 = 14;
     const SLIDING_FRAME_NAME: &str = "Slide";
+    const STARTING_POINT: i16 = -20;
 
     #[derive(Copy, Clone)]
     pub struct Idle;
@@ -354,7 +383,10 @@ mod red_hat_boy_states {
             RedHatBoyState {
                 context: RedHatBoyContext {
                     frame: 0,
-                    position: Point { x: 0, y: FLOOR },
+                    position: Point {
+                        x: STARTING_POINT,
+                        y: FLOOR,
+                    },
                     velocity: Point { x: 0, y: 0 },
                 },
                 _state: Idle {},

@@ -128,6 +128,33 @@ impl GameLoop {
     }
 }
 
+pub struct Image {
+    element: HtmlImageElement,
+    position: Point,
+}
+
+impl Image {
+    pub fn draw(&self, renderer: &Renderer) {
+        renderer.draw_entire_image(&self.element, &self.position);
+    }
+
+    pub fn draw_rect(&self, renderer: &Renderer) {
+        renderer.draw_rect(&Rect {
+            x: self.position.x.into(),
+            y: self.position.y.into(),
+            width: self.element.width() as f32,
+            height: self.element.height() as f32,
+        })
+    }
+
+    pub fn new(element: HtmlImageElement, position: Point) -> Self {
+        Self {
+            element: element,
+            position: position,
+        }
+    }
+}
+
 enum KeyPress {
     KeyUp(web_sys::KeyboardEvent),
     KeyDown(web_sys::KeyboardEvent),
@@ -184,6 +211,12 @@ impl Renderer {
         );
     }
 
+    pub fn draw_entire_image(&self, image: &HtmlImageElement, position: &Point) {
+        self.context
+            .draw_image_with_html_image_element(image, position.x.into(), position.y.into())
+            .expect("Drawing is throwing exceptions! Unrecoverable error.");
+    }
+
     pub fn draw_image(&self, image: &HtmlImageElement, frame: &Rect, destination: &Rect) {
         self.context
             .draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(
@@ -198,5 +231,17 @@ impl Renderer {
                 destination.height.into(),
             )
             .expect("Drawing is throwing exceptions! Unrecoverable error.");
+    }
+
+    pub fn draw_rect(&self, rect: &Rect) {
+        self.context.set_stroke_style(&JsValue::from_str("#FF0000"));
+        self.context.begin_path();
+        self.context.rect(
+            rect.x.into(),
+            rect.y.into(),
+            rect.width.into(),
+            rect.height.into(),
+        );
+        self.context.stroke();
     }
 }
