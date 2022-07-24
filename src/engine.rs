@@ -7,9 +7,12 @@ use futures::channel::{
 use serde::Deserialize;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Mutex};
 use wasm_bindgen::{prelude::Closure, JsCast, JsValue};
-use web_sys::{CanvasRenderingContext2d, HtmlImageElement};
+use web_sys::{AudioBuffer, AudioContext, CanvasRenderingContext2d, HtmlImageElement};
 
-use crate::browser::{self, LoopClosure};
+use crate::{
+    browser::{self, LoopClosure},
+    sound,
+};
 
 pub async fn load_image(source: &str) -> Result<HtmlImageElement> {
     let image = browser::new_image()?;
@@ -73,6 +76,36 @@ fn process_input(state: &mut KeyState, keyevent_reciever: &mut UnboundedReceiver
 }
 
 type SharedLoopClosure = Rc<RefCell<Option<LoopClosure>>>;
+
+#[derive(Clone)]
+pub struct Audio {
+    context: AudioContext,
+}
+
+impl Audio {
+    pub async fn load_sound(&self, filename: &str) -> Result<Sound> {
+        let array_buffer = browser::fetch_array_buffer(filename).await?;
+        let audio_buffer = sound::decode_audio_data(&self.context, &array_buffer).await?;
+
+        Ok(Sound {
+            buffer: audio_buffer,
+        })
+    }
+
+    pub fn new() -> Result<Self> {
+        Ok(Audio {
+            context: sound::create_audio_context()?,
+        })
+    }
+
+    pub fn play_looping_sound(&self, sound: &Sound) -> Result<()> {
+        sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::YES)
+    }
+
+    pub fn play_sound(&self, sound: &Sound) -> Result<()> {
+        sound::play_sound(&self.context, &sound.buffer, sound::LOOPING::NO)
+    }
+}
 
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -319,6 +352,11 @@ pub struct SheetRect {
     pub y: i16,
     pub w: i16,
     pub h: i16,
+}
+
+#[derive(Clone)]
+pub struct Sound {
+    buffer: AudioBuffer,
 }
 
 pub struct SpriteSheet {

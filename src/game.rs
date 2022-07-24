@@ -1,7 +1,9 @@
 use self::red_hat_boy_states::*;
 use crate::{
     browser,
-    engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
+    engine::{
+        self, Audio, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, Sound, SpriteSheet,
+    },
     segments::{platform_and_stone, stone_and_platform},
 };
 use anyhow::{anyhow, Result};
@@ -195,20 +197,20 @@ impl RedHatBoy {
     }
 
     fn jump(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::Jump);
+        self.state_machine = self.state_machine.clone().transition(Event::Jump);
     }
 
     fn knock_out(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::KnockOut);
+        self.state_machine = self.state_machine.clone().transition(Event::KnockOut);
     }
 
     fn land_on(&mut self, position: i16) {
-        self.state_machine = self.state_machine.transition(Event::Land(position));
+        self.state_machine = self.state_machine.clone().transition(Event::Land(position));
     }
 
-    fn new(sheet: Sheet, image: HtmlImageElement) -> Self {
+    fn new(sheet: Sheet, image: HtmlImageElement, audio: Audio, sound: Sound) -> Self {
         RedHatBoy {
-            state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new()),
+            state_machine: RedHatBoyStateMachine::Idle(RedHatBoyState::new(audio, sound)),
             sprite_sheet: sheet,
             image: image,
         }
@@ -219,15 +221,15 @@ impl RedHatBoy {
     }
 
     fn run_right(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::Run);
+        self.state_machine = self.state_machine.clone().transition(Event::Run);
     }
 
     fn slide(&mut self) {
-        self.state_machine = self.state_machine.transition(Event::Slide);
+        self.state_machine = self.state_machine.clone().transition(Event::Slide);
     }
 
     fn update(&mut self) {
-        self.state_machine = self.state_machine.update();
+        self.state_machine = self.state_machine.clone().update();
     }
 
     fn velocity_y(&self) -> i16 {
@@ -239,7 +241,7 @@ impl RedHatBoy {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 enum RedHatBoyStateMachine {
     Falling(RedHatBoyState<Falling>),
     Idle(RedHatBoyState<Idle>),
@@ -273,7 +275,7 @@ impl RedHatBoyStateMachine {
     }
 
     fn transition(self, event: Event) -> Self {
-        match (self, event) {
+        match (self.clone(), event) {
             (RedHatBoyStateMachine::Falling(state), Event::Update) => state.update().into(),
 
             (RedHatBoyStateMachine::Idle(state), Event::Run) => state.run().into(),
@@ -514,10 +516,16 @@ impl Game for WalkTheDog {
                     tiles.into_serde::<Sheet>()?,
                     engine::load_image("tiles.png").await?,
                 ));
+                let audio = Audio::new()?;
+                let sound = audio.load_sound("SFX_Jump_23.mp3").await?;
+                let background_music = audio.load_sound("background_song.mp3").await?;
+                audio.play_looping_sound(&background_music)?;
 
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
                     engine::load_image("rhb.png").await?,
+                    audio,
+                    sound,
                 );
                 let background_width = background.width() as i16;
 
@@ -593,7 +601,7 @@ impl Game for WalkTheDog {
 
 mod red_hat_boy_states {
     use super::HEIGHT;
-    use crate::engine::Point;
+    use crate::engine::{Audio, Point, Sound};
 
     const FALLING_FRAMES: u8 = 29;
     const FALLING_FRAME_NAME: &str = "Dead";
@@ -617,7 +625,7 @@ mod red_hat_boy_states {
     #[derive(Copy, Clone)]
     pub struct Falling;
 
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub enum FallingEndState {
         Falling(RedHatBoyState<Falling>),
         KnockedOut(RedHatBoyState<KnockedOut>),
@@ -626,14 +634,24 @@ mod red_hat_boy_states {
     #[derive(Copy, Clone)]
     pub struct Idle;
 
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub struct RedHatBoyContext {
         pub frame: u8,
         pub position: Point,
         pub velocity: Point,
+        audio: Audio,
+        jump_sound: Sound,
     }
 
     impl RedHatBoyContext {
+        fn play_jump_sound(self) -> Self {
+            if let Err(err) = self.audio.play_sound(&self.jump_sound) {
+                log!("Error playing jump sound: {:#?}", err);
+            }
+
+            self
+        }
+
         fn reset_frame(mut self) -> Self {
             self.frame = 0;
             self
@@ -682,7 +700,7 @@ mod red_hat_boy_states {
         }
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub struct RedHatBoyState<S> {
         context: RedHatBoyContext,
         _state: S,
@@ -722,7 +740,7 @@ mod red_hat_boy_states {
             IDLE_FRAME_NAME
         }
 
-        pub fn new() -> Self {
+        pub fn new(audio: Audio, jump_sound: Sound) -> Self {
             RedHatBoyState {
                 context: RedHatBoyContext {
                     frame: 0,
@@ -731,6 +749,8 @@ mod red_hat_boy_states {
                         y: FLOOR,
                     },
                     velocity: Point { x: 0, y: 0 },
+                    audio,
+                    jump_sound,
                 },
                 _state: Idle {},
             }
@@ -794,8 +814,9 @@ mod red_hat_boy_states {
             RedHatBoyState {
                 context: self
                     .context
+                    .reset_frame()
                     .set_vertical_velocity(JUMPING_SPEED)
-                    .reset_frame(),
+                    .play_jump_sound(),
                 _state: Jumping {},
             }
         }
@@ -867,7 +888,7 @@ mod red_hat_boy_states {
     #[derive(Copy, Clone)]
     pub struct Jumping;
 
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub enum JumpingEndState {
         Complete(RedHatBoyState<Running>),
         Jumping(RedHatBoyState<Jumping>),
@@ -882,7 +903,7 @@ mod red_hat_boy_states {
     #[derive(Copy, Clone)]
     pub struct Sliding;
 
-    #[derive(Copy, Clone)]
+    #[derive(Clone)]
     pub enum SlidingEndState {
         Complete(RedHatBoyState<Running>),
         Sliding(RedHatBoyState<Sliding>),

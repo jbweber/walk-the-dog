@@ -32,12 +32,17 @@ wasm-bindgen-futures = "0.4.31"
 serde = {version = "1.0.139", features = ["derive"] }
 anyhow = "1.0.58"
 async-trait = "0.1.56"
+js-sys = "0.3.58"
 
 # The `web-sys` crate allows you to interact with the various browser APIs,
 # like the DOM.
 [dependencies.web-sys]
 version = "0.3.58"
 features = [
+    "AudioBuffer",
+    "AudioBufferSourceNode",
+    "AudioContext",
+    "AudioDestinationNode",
     "CanvasRenderingContext2d",
     "console",
     "Document",
