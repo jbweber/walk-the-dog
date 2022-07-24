@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use js_sys::ArrayBuffer;
+use serde::__private::doc;
 use std::future::Future;
 use wasm_bindgen::{
     closure::{WasmClosure, WasmClosureFnOnce},
@@ -8,7 +9,8 @@ use wasm_bindgen::{
 };
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    CanvasRenderingContext2d, Document, HtmlCanvasElement, HtmlImageElement, Response, Window,
+    CanvasRenderingContext2d, Document, Element, HtmlCanvasElement, HtmlImageElement, Response,
+    Window,
 };
 
 pub type LoopClosure = Closure<dyn FnMut(f64)>;
@@ -56,6 +58,12 @@ pub fn document() -> Result<Document> {
         .ok_or_else(|| anyhow!("No Document Found"))
 }
 
+pub fn draw_ui(html: &str) -> Result<()> {
+    find_ui()?
+        .insert_adjacent_html("afterbegin", html)
+        .map_err(|err| anyhow!("Could not insert html {:#?}", err))
+}
+
 pub async fn fetch_array_buffer(resource: &str) -> Result<ArrayBuffer> {
     let array_buffer = fetch_response(resource)
         .await?
@@ -91,6 +99,25 @@ pub async fn fetch_with_str(resource: &str) -> Result<JsValue> {
     JsFuture::from(window()?.fetch_with_str(resource))
         .await
         .map_err(|err| anyhow!("error fetching {:#?}", err))
+}
+
+fn find_ui() -> Result<Element> {
+    document().and_then(|doc| {
+        doc.get_element_by_id("ui")
+            .ok_or_else(|| anyhow!("UI element not found"))
+    })
+}
+
+pub fn hide_ui() -> Result<()> {
+    let ui = find_ui()?;
+
+    if let Some(child) = ui.first_child() {
+        ui.remove_child(&child)
+            .map(|_removed_child| ())
+            .map_err(|err| anyhow!("Failed to remove child {:#?}", err))
+    } else {
+        Ok(())
+    }
 }
 
 pub fn new_image() -> Result<HtmlImageElement> {
