@@ -2,16 +2,25 @@ use self::red_hat_boy_states::*;
 use crate::{
     browser,
     engine::{self, Cell, Game, Image, KeyState, Point, Rect, Renderer, Sheet, SpriteSheet},
+    segments::{platform_and_stone, stone_and_platform},
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde::Deserialize;
-use std::{collections::HashMap, rc::Rc};
+use rand::{thread_rng, Rng};
+use std::rc::Rc;
 use web_sys::HtmlImageElement;
 
 const HEIGHT: i16 = 600;
-const HIGH_PLATFORM: i16 = 375;
-const LOW_PLATFORM: i16 = 420;
+const OBSTACLE_BUFFER: i16 = 30;
+const TIMELINE_MINIMUM: i16 = 1000;
+
+fn rightmost(obstacle_list: &Vec<Box<dyn Obstacle>>) -> i16 {
+    obstacle_list
+        .iter()
+        .map(|obstacle| obstacle.right())
+        .max_by(|x, y| x.cmp(&y))
+        .unwrap_or(0)
+}
 
 pub struct Barrier {
     image: Image,
@@ -361,7 +370,7 @@ impl From<SlidingEndState> for RedHatBoyStateMachine {
     }
 }
 
-struct Platform {
+pub struct Platform {
     sheet: Rc<SpriteSheet>,
     bounding_boxes: Vec<Rect>,
     sprites: Vec<Cell>,
@@ -399,7 +408,7 @@ impl Platform {
         );
     }
 
-    fn new(
+    pub fn new(
         sheet: Rc<SpriteSheet>,
         position: Point,
         sprite_names: &[&str],
@@ -436,9 +445,31 @@ pub struct Walk {
     backgrounds: [Image; 2],
     obstacle_sheet: Rc<SpriteSheet>,
     obstacles: Vec<Box<dyn Obstacle>>,
+    stone: HtmlImageElement,
+    timeline: i16,
 }
 
 impl Walk {
+    fn generate_next_segment(&mut self) {
+        let mut rng = thread_rng();
+        let next_segment = rng.gen_range(0..2);
+        let mut next_obstacles = match next_segment {
+            0 => stone_and_platform(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+            ),
+            1 => platform_and_stone(
+                self.stone.clone(),
+                self.obstacle_sheet.clone(),
+                self.timeline + OBSTACLE_BUFFER,
+            ),
+            _ => vec![],
+        };
+        self.timeline = rightmost(&next_obstacles);
+        self.obstacles.append(&mut next_obstacles);
+    }
+
     fn velocity(&self) -> i16 {
         -self.boy.walking_speed()
     }
@@ -483,25 +514,15 @@ impl Game for WalkTheDog {
                     tiles.into_serde::<Sheet>()?,
                     engine::load_image("tiles.png").await?,
                 ));
-                let platform = Platform::new(
-                    sprite_sheet.clone(),
-                    Point {
-                        x: 400,
-                        y: LOW_PLATFORM,
-                    },
-                    &["13.png", "14.png", "15.png"],
-                    &[
-                        Rect::new_from_x_y(0, 0, 60, 54),
-                        Rect::new_from_x_y(60, 0, 384 - (60 * 2), 93),
-                        Rect::new_from_x_y(384 - 60, 0, 60, 54),
-                    ],
-                );
+
                 let rhb = RedHatBoy::new(
                     json.into_serde::<Sheet>()?,
                     engine::load_image("rhb.png").await?,
                 );
                 let background_width = background.width() as i16;
 
+                let starting_obstacles = stone_and_platform(stone.clone(), sprite_sheet.clone(), 0);
+                let timeline = rightmost(&starting_obstacles);
                 Ok(Box::new(WalkTheDog::Loaded(Walk {
                     boy: rhb,
                     backgrounds: [
@@ -514,11 +535,10 @@ impl Game for WalkTheDog {
                             },
                         ),
                     ],
+                    obstacles: starting_obstacles,
                     obstacle_sheet: sprite_sheet,
-                    obstacles: vec![
-                        Box::new(Barrier::new(Image::new(stone, Point { x: 150, y: 546 }))),
-                        Box::new(platform),
-                    ],
+                    timeline: timeline,
+                    stone: stone,
                 })))
             }
 
@@ -561,6 +581,12 @@ impl Game for WalkTheDog {
                 obstacle.move_horizontally(velocity);
                 obstacle.check_intersection(&mut walk.boy);
             });
+
+            if walk.timeline < TIMELINE_MINIMUM {
+                walk.generate_next_segment()
+            } else {
+                walk.timeline += velocity;
+            }
         }
     }
 }

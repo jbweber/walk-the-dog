@@ -2,9 +2,10 @@
 mod browser;
 mod engine;
 mod game;
+mod segments;
 
-use engine::GameLoop;
-use game::WalkTheDog;
+use crate::engine::GameLoop;
+use crate::game::WalkTheDog;
 use wasm_bindgen::prelude::*;
 
 // This is like the `main` function, except for JavaScript.
